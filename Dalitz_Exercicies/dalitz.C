@@ -1,4 +1,4 @@
-#include "TCanvas.h"
+/*#include "TCanvas.h"
 #include "TROOT.h"
 #include "TGraphErrors.h"
 #include "TF1.h"
@@ -6,8 +6,35 @@
 #include "TArrow.h"
 #include "TLatex.h"
 #include "TRandom3.h"
+#include <complex> //complex lib of cpp. Root has a lib too.
+*/
+#include <TApplication.h>
+#include <TCanvas.h>
+#include <TFile.h>
+#include <TH1F.h>
+#include <TH2F.h>
+#include <TGraph.h>
+#include <TLegend.h>
+#include <TMath.h>
+#include <TRandom.h>
+#include <TRandom3.h>
+#include <TTree.h>
+#include <TROOT.h>
+#include <TNtuple.h>
+#include <TComplex.h>
+#include <TFile.h>
+#include <TTree.h>
+#include <TStyle.h>
+#include <TH2Poly.h>
+#include "Math/IFunction.h"
+#include <cmath>
+#include <iostream>
+#include "Resonances.h"
 
+//using namespace Resonances;
+//using namespace ROOT;
 
+#define POW2(x)(pow(x, 2))
 /*
 Resonances for DKKP - for reference
       ks_892
@@ -17,14 +44,62 @@ Resonances for DKKP - for reference
       a0_1450
       kappa
       k2s_1430
+*//*
+Data from PDG
+      ks_892   - mass = 891.67   +- 0.26;    width = 51.4  +- 0.8
+      phi_1020 - mass = 1019.461 +- 0.016;   width = 4.249 +- 0.013
+      phi_1680 - mass = 1680     +- 20;      width = 150   +- 50 (???)
 */
 /*
+double momentum(int spin);
+double cos12(double m0, double m1, double m2, double m3, double s12, double s13);
+double Form_Blatt_Weisskopf(double p, double r, int J);
+TComplex BW(double m0, double s12, double gamma);
+double lambda(double x, double y, double z);
+double s_12_lim(double M, double m_1, double m_2, double m_3, double s23, bool c);
+TComplex pdf(Resonance res[], double m0, double m1, double m2, double m3, double s12, double s13);
+
+
 Make a .h file with these function
 
 */
 
-//p and r ??
-double Form_Blatt_Wieskopf(double p, double r, int J){
+//momentum term on amplitude's coefficient. not returning the right momentum yet.
+//(-2*p1*p3)**J
+double momentum(int spin){
+
+   return pow(-2, spin);
+}
+
+// cosine between particle for BW
+//s = m0 ** 2
+/* notes from felipe - returning a neg value on sqrt
+double cos13(double m0, double m1, double m2, double m3, double s12, double s13){
+   double s = POW2(m0);
+   double a = 2*s12*(POW2(m1) + POW2(m3) - s13);
+   double b = (s12 - POW2(m2) + POW2(m1)) * (s - s12 - POW2(m3));
+   double c = POW2(s12 - POW2(m2) - POW2(m1)) - 4 * POW2(m2) * POW2(m1);
+   double d = POW2(s12 - s12 - POW2(m3)) - 4 * s12 * POW2(m3);
+   cout << "s " << s << endl;
+   cout << "a " << a << endl;
+   cout << "b " << b << endl;
+   cout << "c " << c << endl;
+   cout << "d " << d << endl;
+   return (a+b)/pow(c * d, 1./2);
+}*/
+//function on Kajanti
+double cos12(double m0, double m1, double m2, double m3, double s12, double s13){
+   double s = POW2(m0);
+   double s23 = s + POW2(m1) + POW2(m2) + POW2(m3) - s12 - s13;
+   double a = 2*s*(POW2(m1) + POW2(m2) - s12);
+   double b = (s - POW2(s23) + POW2(m1)) * (s - s13 + POW2(m2));
+   double c = lambda(s, POW2(m1), s23);
+   double d = lambda(s, POW2(m2), s13);
+   return (a+b)/pow(c * d, 1./2);
+}
+// not using
+// p and r ??
+double Form_Blatt_Weisskopf(double p, double r, int J){
    if(J==0){
       return 1;
    } else if(J==1){
@@ -33,42 +108,47 @@ double Form_Blatt_Wieskopf(double p, double r, int J){
       return 1/pow(9+3*pow(r, 2)*pow(p, 2)+pow(r, 4)*pow(p, 4), 1./2);
    }
 
+   return 1; //just in case of error
 }
 
-// Brit-Wigner's Gamma function 
+/*
+// not using
+// Breit-Wigner's Gamma function 
 double G_BW(double m0, double m12){
+   double dummy = Form_Blatt_Weisskopf(p, r, J)/Form_Blatt_Weisskopf(p, r, J);//not right
+   double dummy2 = pow(p/p0, 2*J+1);
+   double dummy3 = m0*Form_Blatt_Weisskopf(p, r, J)/m12
+}*/
 
+// Breit-Wigner's function
+// also depends on p
+//use gamma from pdg
+TComplex BW(double m0, double s12, double gamma){
+   //1/(pow(m0, 2)-pow(m12, 2)-IMAGINARY * m0 * G_BW(m0, m12));
+   //real part
+   //double a = POW2(m0) - POW2(m12), b = m0 * G_BW(m0, m12);
+   //in function of invariant mass instead of s12:
+   //double a = POW2(m0) - POW2(m12), b = m0 * gamma;
+   double a = POW2(m0) - s12, b = m0 * gamma;
+   double realBW = a/(POW2(a)+POW2(b));
+   double imBW = b/(POW2(a)+POW2(b));
+   return TComplex(realBW, imBW);
 }
 
-// Briet-Wigner's function
-double BW(){
-   1/(pow(m0, 2)-pow(m12, 2)-IMAGINARY * m0 * G_BW(m0, m12));
-}
-//ROOT::Math::legendre([0],x)
-
-//Kallen's function 
+// Kallen's function 
 double lambda(double x, double y, double z) {
    return pow(x-y-z,2)-4*y*z;
 }
 
-
-/* // not using
-//invariant mass sqr
-double s_ij(double p1[], double p2[]){
-   double m_12 = p1+p2;
-   return pow(m12[0],2)-pow(m12[1],2)-pow(m12[2],2)-pow(m12[3],2);
-}*/
-
-//"A" cursive on isobaric model. Expressed as a function of s_ij and s_ik.
-/*double pdf(){
-   return ;
+//abs val of "A" cursive sqrd on isobaric model. Expressed as a function of s_ij and s_ik.
+TComplex pdf(Resonance res[], double m0, double m1, double m2, double m3, double s12, double s13, int dim_array){//m0 = mother mass
+   TComplex A_total = TComplex(1, 0);
+   //for (int j = 0; j<int(sizeof(res)/sizeof(*res)); j++){
+   for (int j = 0; j<dim_array; j++){
+      A_total += res[j].getCoeficient(m0, m1, m2, m3, s12, s13);
+   }
+   return A_total;
 }
-
-double pdf_coef(){
-   return ; 
-}
-*/
-
 
 //cinematics limits
 //implement sqr mass as variable
@@ -87,68 +167,50 @@ double s_12_lim(double M, double m_1, double m_2, double m_3, double s23, bool c
    return pow(m_1, 2)+pow(m_2,2)-dummy/(2*s23);
 }
 
-void dalitz_isobaric(int nEntries=1000){
+//dalitz_isobaric
+void dalitz(int nEntries=1000){
    //PDG
    double m_K493=493.67, m_pi139=139.57, m_Dplus=1869.66;
-
-   //KKP for now
-   double s23_min = pow(m_K493+m_pi139, 2);
-   double s23_max = pow(m_Dplus-m_K493, 2);
-   double s12_min = pow(m_K493+m_K493, 2);
-   double s12_max = pow(m_Dplus-m_pi139, 2);
-
-   TH1F h_s12("h_s12","",100, s12_min, s12_max);
-   TH1F h_s23("h_s23","",100, s23_min, s23_max);
-   TH2F h_dalitz("h_dalitz","",100, s12_min, s12_max, 100, s23_min, s23_max);
-
-   TRandom3 r(1);
+   //number of terms on pdf
    
-   // Generating a toy under the cinematics limits
-   for(int i=0; i<nEntries; i++){
+   //implement mem alloc
+   int nRes = 10, nBins =100;
 
-      double s12 = r.Uniform(s12_min, s12_max);
-      double s23 = r.Uniform(s23_min, s23_max);
-
-      if(s12<=s_12_lim(m_Dplus, m_K493, m_K493, m_pi139, s23, 1) && s12>=s_12_lim(m_Dplus, m_K493, m_K493, m_pi139, s23, 0)){
-         //fill histograms
-         h_s12.Fill(s12);
-         h_s23.Fill(s23);
-         h_dalitz.Fill(s12,s23);
-      }
-   }
-
-   //not working - look for syntax
-   //h_dalitz.Fill(h_s12,h_s23);
-
-   // Let's open a TFile
-   TFile out_file("dalitz.root","RECREATE");
-   
-   // Write the histogram in the file
-   h_s12.Write();
-   h_s23.Write();
-   h_dalitz.Write();
-
-   // Close the file
-   out_file.Close();
-
-   //TCanvas c = new TCanvas();
-   //h_dalitz.Draw("COLZ");
-
-}
-
-void dalitz(int nEntries=1000){
-   // PDG
-   double m_K493=493.67, m_pi139=139.57, m_Dplus=1869.66;
+   //Resonance res[10] = {0};
+   // ks_892   - mass = 891.67   +- 0.26;    width = 51.4  +- 0.8
+   //res[0] = new Resonance(891.67, 1, 51.4, 1, 0);
+   //phi_1020 - mass = 1019.461 +- 0.016;   width = 4.249 +- 0.013
+   Resonance res[] = {Resonance(1019.461, 1, 4.249, 1, 0, 12)};
 
    // KKP for now
-   double s23_min = pow(m_K493+m_pi139, 2);
-   double s23_max = pow(m_Dplus-m_K493, 2);
+   double s13_min = pow(m_K493+m_pi139, 2);
+   double s13_max = pow(m_Dplus-m_K493, 2);
    double s12_min = pow(m_K493+m_K493, 2);
    double s12_max = pow(m_Dplus-m_pi139, 2);
 
-   TH1F h_s12("h_s12","",100, s12_min, s12_max);
-   TH1F h_s23("h_s23","",100, s23_min, s23_max);
-   TH2F h_dalitz("h_dalitz","",100, s12_min, s12_max, 100, s23_min, s23_max);
+   TH1F h_s12("h_s12", "", nBins, s12_min, s12_max);
+   TH1F h_s13("h_s13", "", nBins, s13_min, s13_max);
+   TH2F h_dalitz("h_dalitz", "", nBins, s13_min, s13_max, nBins, s12_min, s12_max);
+
+   //double A_total = 1; // 1 -> no Resonance term 
+   TComplex A_total = TComplex(1,0);
+
+   // making a loop to get the maximum value of the pdf.
+   double max_pdf[3] = {0};
+   double i_s12 = 0, i_s13 = 0, ds13 = (s13_max - s13_min)/nBins, ds12 = (s12_max - s12_min)/nBins;
+   for(int k = 0; k<nBins; k++){
+      for(int l = 0; l<nBins; l++){
+         i_s12 = s12_min + k*ds12 + ds12/2;
+         i_s13 = s13_min + l*ds13 + ds13/2;
+         A_total = pdf(res, m_Dplus, m_K493, m_K493, m_pi139, i_s12, i_s13, int(sizeof(res)/sizeof(*res)));
+         double dum1 = (A_total*TComplex::Conjugate(A_total)).Re(); //A**2
+         if(dum1 > max_pdf[0]){
+            max_pdf[0] = A_total;
+            max_pdf[1] = i_s12; //bin s12
+            max_pdf[2] = i_s13; //bin s13
+         }
+      }
+   }
 
    TRandom3 r(1);
    
@@ -156,25 +218,34 @@ void dalitz(int nEntries=1000){
    for(int i=0; i<nEntries; i++){
 
       double s12 = r.Uniform(s12_min, s12_max);
-      double s23 = r.Uniform(s23_min, s23_max);
+      double s13 = r.Uniform(s13_min, s13_max);
 
-      if(s12<=s_12_lim(m_Dplus, m_K493, m_K493, m_pi139, s23, 1) && s12>=s_12_lim(m_Dplus, m_K493, m_K493, m_pi139, s23, 0)){
-         //fill histograms
-         h_s12.Fill(s12);
-         h_s23.Fill(s23);
-         h_dalitz.Fill(s12,s23);
+
+
+      if(s12<=s_12_lim(m_Dplus, m_K493, m_K493, m_pi139, s13, 1) && s12>=s_12_lim(m_Dplus, m_K493, m_K493, m_pi139, s13, 0)){
+         
+         //calculating pdf
+         A_total = pdf(res, m_Dplus, m_K493, m_K493, m_pi139, s12, s13, int(sizeof(res)/sizeof(*res)));
+
+         double dum1 = (A_total*TComplex::Conjugate(A_total)).Re(); //A**2
+         //cout << "A_total**2 - " << dum1 <<endl;
+
+         if(r.Uniform(0, max_pdf[0])<=dum1){ //could generate a rnd number uppon the probability
+            //fill histograms
+            h_s12.Fill(s12);
+            h_s13.Fill(s13);
+            h_dalitz.Fill(s13,s12);
+         }
+         
       }
    }
-
-   //not working - look for syntax
-   //h_dalitz.Fill(h_s12,h_s23);
 
    // Let's open a TFile
    TFile out_file("dalitz.root","RECREATE");
    
    // Write the histogram in the file
    h_s12.Write();
-   h_s23.Write();
+   h_s13.Write();
    h_dalitz.Write();
 
    // Close the file
@@ -184,29 +255,3 @@ void dalitz(int nEntries=1000){
    //h_dalitz.Draw("COLZ");
 
 }
-
-
-/*
-MC - Dalitz plot
-
-pt1 - Gerando sem as ressonâncias.
-
-Definir o limites do dalitz de acordo com as massas do decaimento.
-
-Criar os histogramas que serão preechidos.
-
-Começo de um loop.
-
-   Sortear as variaveis s12 e s23, que são as massas invariante ao quadrado do pares 12 e 23, dentro dos limites de maneira uniforme.
-
-   Calcular de acordo com o limite cinemático se o ponto no dalitz está dentro o fora da área. O limite das bordas do dalitz é dado por:
-
-   Se está dentro, preecher os histogramas dos pares s12, s23 e do dalitz.
-
-Fim do loop
-
-Salvar em um arquivo .root.
-
-pt2 - Adicionando as ressonancias.
-
-*/
